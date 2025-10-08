@@ -8,12 +8,6 @@ terraform {
       source = "hashicorp/random"
     }
   }
-  backend "azurerm" {
-    resource_group_name  = "rg-terraform-state"
-    storage_account_name = "tfstatetchungryale"  
-    container_name       = "tfstate"
-    key                  = "infra-k8s.tfstate" 
-  }
 }
 
 provider "azurerm" {
