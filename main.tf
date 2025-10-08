@@ -8,6 +8,12 @@ terraform {
       source = "hashicorp/random"
     }
   }
+  backend "azurerm" {
+    resource_group_name  = "rg-terraform-state"
+    storage_account_name = "tfstatetchungryale"  
+    container_name       = "tfstate"
+    key                  = "infra-k8s.tfstate" 
+  }
 }
 
 provider "azurerm" {
@@ -64,7 +70,10 @@ resource "azurerm_kubernetes_cluster" "aks" {
 resource "azurerm_role_assignment" "aks_pull_from_acr" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
-  principal_id         = azurerm_kubernetes_cluster.aks.identity[0].principal_id
+  principal_id         = coalesce(
+    try(azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id, null),
+    azurerm_kubernetes_cluster.aks.identity[0].principal_id
+  )
   depends_on = [
     azurerm_kubernetes_cluster.aks
   ]
