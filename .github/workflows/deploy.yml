@@ -38,13 +38,6 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # 4. Terraform Format Check
-      - name: 'Terraform Format Check'
-        run: |
-          echo "🔍 Checking Terraform formatting..."
-          terraform fmt -check -recursive
-        continue-on-error: true
-
       # 5. Terraform Init
       - name: 'Terraform Init'
         run: |
