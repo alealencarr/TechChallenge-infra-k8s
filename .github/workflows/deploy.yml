@@ -28,7 +28,7 @@ jobs:
 
       # 2. Login no Azure
       - name: 'Azure Login'
-        uses: azure/login@v1
+        uses: azure/login@v1 
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
