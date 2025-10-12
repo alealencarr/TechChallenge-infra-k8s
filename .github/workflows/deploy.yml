@@ -86,61 +86,62 @@ jobs:
           echo "ACR Login Server: $(terraform output -raw acr_login_server)"
           echo "AKS Cluster: $(terraform output -raw aks_cluster_name)"
           echo "Function App: $(terraform output -raw function_app_default_hostname)"
-
-      # 10. Configura kubeconfig do AKS  
-      - name: 'Get AKS credentials'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "🔐 Getting AKS credentials..."
-          AKS_NAME=$(terraform output -raw aks_cluster_name)
-          az aks get-credentials --resource-group rg-tchungry-prod --name $AKS_NAME --overwrite-existing
-          echo "✅ kubectl configured!"
-
-      # 11. Verifica status do AKS  
-      - name: 'Verify AKS status'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "🔍 Checking AKS cluster status..."
-          kubectl get nodes
-          echo ""
-          echo "📦 Checking namespaces:"
-          kubectl get namespaces
-          echo ""
-          echo "🔧 Checking AGIC pods:"
-          kubectl get pods -n kube-system -l app=ingress-appgw
-          echo "✅ AKS cluster is healthy!"
-
-      # 12. Verifica Function App 
-      - name: 'Verify Function App status'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "🔍 Checking Function App status..."
-          FUNC_NAME=$(terraform output -raw function_app_name)
-          az functionapp show --name $FUNC_NAME --resource-group rg-tchungry-prod --query "{name:name, state:state, publicNetworkAccess:publicNetworkAccess}" -o table
-          echo "✅ Function App is ready!"
-
-      # 12.1. Garante integração AKS-ACR  
-      - name: 'Ensure AKS-ACR integration'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "🔗 Ensuring AKS-ACR integration..."
-          AKS_NAME=$(terraform output -raw aks_cluster_name)
-          ACR_NAME=$(terraform output -raw acr_name)
-          az aks update --name $AKS_NAME --resource-group rg-tchungry-prod --attach-acr $ACR_NAME
-          echo "✅ AKS-ACR integration configured!"
-
-      # 12.2. Verifica role assignments  
-      - name: 'Verify AKS role assignments'
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "🔍 Checking AKS role assignments..."
-          ACR_ID=$(terraform output -raw acr_name)
-          az role assignment list --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-tchungry-prod/providers/Microsoft.ContainerRegistry/registries/$ACR_ID --query "[?roleDefinitionName=='AcrPull'].{Role:roleDefinitionName, Principal:principalName}" -o table
-          echo "✅ Role assignments verified!"
-
-      # 13. Logout do Azure
+    
+      # 10. Logout do Azure
       - name: 'Azure Logout'
         if: always()
         run: |
           az logout
           echo "✅ Logged out from Azure"
+
+
+#  # 10. Configura kubeconfig do AKS  
+#       - name: 'Get AKS credentials'
+#         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#         run: |
+#           echo "🔐 Getting AKS credentials..."
+#           AKS_NAME=$(terraform output -raw aks_cluster_name)
+#           az aks get-credentials --resource-group rg-tchungry-prod --name $AKS_NAME --overwrite-existing
+#           echo "✅ kubectl configured!"
+
+#       # 11. Verifica status do AKS  
+#       - name: 'Verify AKS status'
+#         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#         run: |
+#           echo "🔍 Checking AKS cluster status..."
+#           kubectl get nodes
+#           echo ""
+#           echo "📦 Checking namespaces:"
+#           kubectl get namespaces
+#           echo ""
+#           echo "🔧 Checking AGIC pods:"
+#           kubectl get pods -n kube-system -l app=ingress-appgw
+#           echo "✅ AKS cluster is healthy!"
+
+#       # 12. Verifica Function App 
+#       - name: 'Verify Function App status'
+#         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#         run: |
+#           echo "🔍 Checking Function App status..."
+#           FUNC_NAME=$(terraform output -raw function_app_name)
+#           az functionapp show --name $FUNC_NAME --resource-group rg-tchungry-prod --query "{name:name, state:state, publicNetworkAccess:publicNetworkAccess}" -o table
+#           echo "✅ Function App is ready!"
+
+#       # 12.1. Garante integração AKS-ACR  
+#       - name: 'Ensure AKS-ACR integration'
+#         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#         run: |
+#           echo "🔗 Ensuring AKS-ACR integration..."
+#           AKS_NAME=$(terraform output -raw aks_cluster_name)
+#           ACR_NAME=$(terraform output -raw acr_name)
+#           az aks update --name $AKS_NAME --resource-group rg-tchungry-prod --attach-acr $ACR_NAME
+#           echo "✅ AKS-ACR integration configured!"
+
+#       # 12.2. Verifica role assignments  
+#       - name: 'Verify AKS role assignments'
+#         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#         run: |
+#           echo "🔍 Checking AKS role assignments..."
+#           ACR_ID=$(terraform output -raw acr_name)
+#           az role assignment list --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-tchungry-prod/providers/Microsoft.ContainerRegistry/registries/$ACR_ID --query "[?roleDefinitionName=='AcrPull'].{Role:roleDefinitionName, Principal:principalName}" -o table
+#           echo "✅ Role assignments verified!"
