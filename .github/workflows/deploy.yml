@@ -1,0 +1,146 @@
+name: Deploy Infraestrutura de Computação
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  TF_VERSION: '1.5.0'
+  ARM_SUBSCRIPTION_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).subscriptionId }}
+  ARM_TENANT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).tenantId }}
+  ARM_CLIENT_ID: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientId }}
+  ARM_CLIENT_SECRET: ${{ fromJson(secrets.AZURE_CREDENTIALS).clientSecret }}
+
+jobs:
+  terraform:
+    name: 'Terraform Plan & Apply'
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout do código
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+
+      # 2. Login no Azure
+      - name: 'Azure Login'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # 3. Setup do Terraform
+      - name: 'Setup Terraform'
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # 4. Terraform Format Check
+      - name: 'Terraform Format Check'
+        run: |
+          echo "🔍 Checking Terraform formatting..."
+          terraform fmt -check -recursive
+        continue-on-error: true
+
+      # 5. Terraform Init
+      - name: 'Terraform Init'
+        run: |
+          echo "🔧 Initializing Terraform..."
+          terraform init
+          echo "✅ Terraform initialized!"
+
+      # 6. Terraform Validate
+      - name: 'Terraform Validate'
+        run: |
+          echo "✅ Validating Terraform configuration..."
+          terraform validate
+          echo "✅ Configuration is valid!"
+
+      # 7. Terraform Plan
+      - name: 'Terraform Plan'
+        run: |
+          echo "📋 Planning infrastructure changes..."
+          terraform plan -out=tfplan
+          echo "✅ Plan complete!"
+
+      # 8. Terraform Apply (só na main e push)
+      - name: 'Terraform Apply'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🚀 Applying infrastructure changes..."
+          echo "📦 Creating: AKS, ACR, Function App, Application Gateway..."
+          terraform apply -auto-approve tfplan
+          echo "✅ Compute infrastructure deployed successfully!"
+
+      # 9. Terraform Output 
+      - name: 'Show Terraform Outputs'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "📊 Compute Infrastructure Outputs:"
+          terraform output -json
+          echo ""
+          echo "🔍 Important URLs:"
+          echo "ACR Login Server: $(terraform output -raw acr_login_server)"
+          echo "AKS Cluster: $(terraform output -raw aks_cluster_name)"
+          echo "Function App: $(terraform output -raw function_app_default_hostname)"
+
+      # 10. Configura kubeconfig do AKS  
+      - name: 'Get AKS credentials'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔐 Getting AKS credentials..."
+          AKS_NAME=$(terraform output -raw aks_cluster_name)
+          az aks get-credentials --resource-group rg-tchungry-prod --name $AKS_NAME --overwrite-existing
+          echo "✅ kubectl configured!"
+
+      # 11. Verifica status do AKS  
+      - name: 'Verify AKS status'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔍 Checking AKS cluster status..."
+          kubectl get nodes
+          echo ""
+          echo "📦 Checking namespaces:"
+          kubectl get namespaces
+          echo ""
+          echo "🔧 Checking AGIC pods:"
+          kubectl get pods -n kube-system -l app=ingress-appgw
+          echo "✅ AKS cluster is healthy!"
+
+      # 12. Verifica Function App 
+      - name: 'Verify Function App status'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔍 Checking Function App status..."
+          FUNC_NAME=$(terraform output -raw function_app_name)
+          az functionapp show --name $FUNC_NAME --resource-group rg-tchungry-prod --query "{name:name, state:state, publicNetworkAccess:publicNetworkAccess}" -o table
+          echo "✅ Function App is ready!"
+
+      # 12.1. Garante integração AKS-ACR  
+      - name: 'Ensure AKS-ACR integration'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔗 Ensuring AKS-ACR integration..."
+          AKS_NAME=$(terraform output -raw aks_cluster_name)
+          ACR_NAME=$(terraform output -raw acr_name)
+          az aks update --name $AKS_NAME --resource-group rg-tchungry-prod --attach-acr $ACR_NAME
+          echo "✅ AKS-ACR integration configured!"
+
+      # 12.2. Verifica role assignments  
+      - name: 'Verify AKS role assignments'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "🔍 Checking AKS role assignments..."
+          ACR_ID=$(terraform output -raw acr_name)
+          az role assignment list --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-tchungry-prod/providers/Microsoft.ContainerRegistry/registries/$ACR_ID --query "[?roleDefinitionName=='AcrPull'].{Role:roleDefinitionName, Principal:principalName}" -o table
+          echo "✅ Role assignments verified!"
+
+      # 13. Logout do Azure
+      - name: 'Azure Logout'
+        if: always()
+        run: |
+          az logout
+          echo "✅ Logged out from Azure"
