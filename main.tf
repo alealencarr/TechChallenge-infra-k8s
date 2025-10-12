@@ -154,7 +154,7 @@ resource "azurerm_linux_function_app" "auth_function" {
   storage_account_access_key = azurerm_storage_account.function_storage.primary_access_key
   service_plan_id            = azurerm_service_plan.function_plan.id
 
-  # CRÍTICO: Function App PRIVADA (só abre temporariamente no deploy via GitHub Actions)
+  #  Function App PRIVADA (só abre temporariamente no deploy via GitHub Actions)
   public_network_access_enabled = false
 
   site_config {
